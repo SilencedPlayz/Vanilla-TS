@@ -23,7 +23,7 @@ function logError(message) {
       E += `\n${" ".repeat(padding)}${arrow}${s}`;
     }
 
-    throw new Error(E);
+    throw E;
   }
 }
 
@@ -224,6 +224,7 @@ function checkTypeArray(v, w) {
     logError(`Not a valid array type: ${JSON.stringify(w)}`);
 
   w.forEach(a => {
+    // this is to allow nested array(array(type))
     modeRunner(v, a);
   });
 }
@@ -366,7 +367,9 @@ export const literal = v => {
 export const enumOf = v => {
   checkObject(v);
   checkEmptyObject(v);
-  const nv = new Set(Object.keys(v));
+
+  const nv = new Set(Object.values(v).concat(Object.keys(v)));
+
   return {
     tscmode: "enumeration-check",
     tscvalidationkey: TSCVALIDATIONKEY,
