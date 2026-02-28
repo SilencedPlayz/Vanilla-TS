@@ -47,7 +47,7 @@ function modeRunner(v, w) {
       v.check(v.parentObj, w);
       break;
 
-    case "enum-check":
+    case "union-check":
       v.check(v.options, w);
       break;
 
@@ -135,12 +135,28 @@ function filterOptionalArgs(v, w) {
     );
   }
 }
-function checkEnum(v, w) {
-  if (!Array.isArray(v)) logError(`Enum definition must be in an array`);
-  if (!v.includes(w))
-    logError(
-      `Not a valid option: '${w}', accepted options are: ${v.join(" | ")}`
-    );
+function checkUnion(v, w) {
+  if (v.length < 2) logError(`Union definition needs atleast 2 items`);
+
+  const nv = v.map(vi => {
+    if (
+      typeof vi !== "object" ||
+      Array.isArray(vi) ||
+      vi?.tscvalidationkey !== TSCVALIDATIONKEY
+    ) {
+      return literal(vi);
+    } else {
+      return vi;
+    }
+  });
+
+  for (const nvi of nv) {
+    try {
+      modeRunner(nvi, w);
+      return;
+    } catch {}
+  }
+  logError(`Value ${JSON.stringify(w)} is not assignable to union`);
 }
 function checkInterface(v, w) {
   checkObject(v);
@@ -296,12 +312,12 @@ export const interf = v => {
     value: v
   };
 };
-export const Enum = v => {
+export const union = (...v) => {
   return {
-    tscmode: "enum-check",
+    tscmode: "union-check",
     tscvalidationkey: TSCVALIDATIONKEY,
     options: v,
-    check: (a, b) => checkEnum(a, b)
+    check: (a, b) => checkUnion(a, b)
   };
 };
 export const array = v => {
@@ -344,8 +360,7 @@ export const literal = v => {
 
 /**
  * Needed to add:
- * @union
- * @literal
+ * @enum - object like enumeration
  */
 
 // as one obj
@@ -357,7 +372,7 @@ export const types = {
   object,
   func,
   interf,
-  Enum,
+  union,
   keyof,
   array,
   optional,

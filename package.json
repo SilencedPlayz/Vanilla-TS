@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "dev": "node test.js"
+  },
+  "type": "module"
+}

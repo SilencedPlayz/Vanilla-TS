@@ -6,9 +6,10 @@ A lightweight TypeScript-like runtime type checking library for vanilla JavaScri
 
 ## Features
 
-- Runtime type checking for primitives, objects, interfaces, arrays, enums, literals, and more
+- Runtime type checking for primitives, objects, interfaces, arrays, unions, literals, and more
 - Descriptive stack-traced error messages
 - Composable and nestable type checkers
+- Union types that accept both type checkers and raw literal values
 - Optional and Record type support
 - Zero dependencies
 
@@ -38,7 +39,7 @@ const {
   interf,
   array,
   optional,
-  Enum,
+  union,
   Record,
   keyof,
   literal,
@@ -123,6 +124,35 @@ param(UserType, { name: "Alice" }); // ❌ throws: Missing required key: age
 
 ---
 
+### `types.union(...types)`
+
+Validates that a value matches **at least one** of the given types. Accepts both type checkers and raw literal values — raw values are automatically wrapped as literals internally.
+
+Requires at least 2 items.
+
+```js
+const { union, string, number, boolean } = types;
+
+// With type checkers
+const StringOrNumber = union(string, number);
+param(StringOrNumber, "hello"); // ✅
+param(StringOrNumber, 42); // ✅
+// param(StringOrNumber, true); // ❌ Value true is not assignable to union
+
+// With raw literal values (auto-wrapped as literals)
+const Direction = union("north", "south", "east", "west");
+param(Direction, "north"); // ✅
+// param(Direction, "up");      // ❌ Value "up" is not assignable to union
+
+// Mixing type checkers and literals
+const Id = union(number, "auto");
+param(Id, 42); // ✅
+param(Id, "auto"); // ✅
+// param(Id, "manual");         // ❌ Value "manual" is not assignable to union
+```
+
+---
+
 ### `types.array(type)`
 
 Validates that a value is an array where every element matches the given type checker.
@@ -136,21 +166,6 @@ param(array(number), [1, "two", 3]); // ❌ throws
 
 ---
 
-### `types.Enum(options)`
-
-Validates that a value is one of the allowed options.
-
-```js
-const { Enum } = types;
-
-const Direction = Enum(["north", "south", "east", "west"]);
-
-param(Direction, "north"); // ✅
-param(Direction, "up"); // ❌ throws: Not a valid option: 'up', accepted options are: north | south | east | west
-```
-
----
-
 ### `types.optional(type)`
 
 Marks a type as optional — passes if the value is `undefined` or `null`, otherwise validates normally.
@@ -159,6 +174,7 @@ Marks a type as optional — passes if the value is `undefined` or `null`, other
 const { optional, string } = types;
 
 param(optional(string), undefined); // ✅
+param(optional(string), null); // ✅
 param(optional(string), "hello"); // ✅
 param(optional(string), 42); // ❌ throws
 ```
@@ -234,6 +250,20 @@ param(UserType, {
 }); // ✅
 ```
 
+### Union Inside an Interface
+
+```js
+const { interf, string, number, union } = types;
+
+const ShapeType = interf({
+  kind: union("circle", "rect", "triangle"),
+  size: number
+});
+
+param(ShapeType, { kind: "circle", size: 10 }); // ✅
+// param(ShapeType, { kind: "oval", size: 10 }); // ❌ Value "oval" is not assignable to union
+```
+
 ### Runtime Function Type Guards
 
 ```js
@@ -245,7 +275,6 @@ function createUser(...args) {
     number,
     optional(string)
   ]);
-  // name is string, age is number, role is string | undefined
 }
 
 createUser("Alice", 30); // ✅
@@ -269,7 +298,7 @@ Error: Not a valid string type: '42'
 
 ## Roadmap
 
-- [ ] `union` type support
+- [ ] Object-like `Enum` type
 
 ---
 
