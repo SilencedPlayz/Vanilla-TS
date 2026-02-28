@@ -23,7 +23,7 @@ function logError(message) {
       E += `\n${" ".repeat(padding)}${arrow}${s}`;
     }
 
-    throw E;
+    throw new Error(E);
   }
 }
 
@@ -67,6 +67,10 @@ function modeRunner(v, w) {
       v.check(v.literal, w);
       break;
 
+    case "enumeration-check":
+      v.check(v.values, w);
+      break;
+
     default:
       logError(`Invalid checker mode: ${v.tscmode}`);
   }
@@ -82,16 +86,38 @@ function checkValidChecker(v) {
   }
 }
 
+// main param checks
+// for single argument
+export function param(v, w) {
+  if (typeof v === "undefined") logError(`Missing 1st argument: types`);
+
+  checkValidChecker(v);
+  modeRunner(v, w);
+}
+/**
+ * so we can use it easier as:
+ * function test(...args){
+ *   const [name,age] = multiParams(args,[string,number])
+ *   console.log(name,age)
+ * }
+ */
+export function multiParams(w, v) {
+  if (!Array.isArray(v))
+    logError(`Expecting an array of types, received: ${JSON.stringify(v)}`);
+  if (!Array.isArray(w))
+    logError(`Expecting an array of arguments, received: ${JSON.stringify(w)}`);
+
+  checkOptionalArgs(v, w);
+
+  v.forEach((a, i) => {
+    param(a, w[i]);
+  });
+
+  return w;
+}
+
 // all checks
-function checkType(v, s) {
-  if (typeof s !== v) logError(`Not a valid ${v} type: '${s}'`);
-}
-function checkHasKey(v, w) {
-  checkObject(v);
-  if (!Object.prototype.hasOwnProperty.call(v, w))
-    logError(`Key ${w} is invalid`);
-}
-function checkKeys(v, w) {
+function checkInvalidKeys(v, w) {
   checkObject(v);
   if (!Object.prototype.hasOwnProperty.call(v, w))
     logError(`Unexpected key: ${JSON.stringify(w)}`);
@@ -110,7 +136,7 @@ function checkMissingKey(v, w) {
       logError(`Missing required key: ${e}`);
   });
 }
-function checkOptionalKeys(v, w) {
+function filterOptionalKeys(v, w) {
   let res = { ...v };
   Object.keys(v).forEach(a => {
     if (a.endsWith("?")) {
@@ -125,7 +151,7 @@ function checkOptionalKeys(v, w) {
   });
   return res;
 }
-function filterOptionalArgs(v, w) {
+function checkOptionalArgs(v, w) {
   // t stands for 'total mandatory args'
   const t = v.filter(vt => vt.tscmode !== "optional-type-check");
 
@@ -134,6 +160,14 @@ function filterOptionalArgs(v, w) {
       `Expecting ${t.length}-${v.length} arguments, received ${w.length}`
     );
   }
+}
+function checkEmptyObject(v) {
+  checkObject(v);
+  if (Object.keys(v).length === 0) logError(`Object is empty`);
+}
+
+function checkType(v, s) {
+  if (typeof s !== v) logError(`Not a valid ${v} type: '${s}'`);
 }
 function checkUnion(v, w) {
   if (v.length < 2) logError(`Union definition needs atleast 2 items`);
@@ -154,7 +188,9 @@ function checkUnion(v, w) {
     try {
       modeRunner(nvi, w);
       return;
-    } catch {}
+    } catch {
+      continue;
+    }
   }
   logError(`Value ${JSON.stringify(w)} is not assignable to union`);
 }
@@ -163,10 +199,10 @@ function checkInterface(v, w) {
   checkObject(w);
   checkMissingKey(v, w);
 
-  const nv = checkOptionalKeys(v, w);
+  const nv = filterOptionalKeys(v, w);
 
   Object.keys(w).forEach((t, i) => {
-    checkKeys(nv, t);
+    checkInvalidKeys(nv, t);
     if (
       nv[t] &&
       nv[t].tscmode === "optional-type-check" &&
@@ -191,11 +227,7 @@ function checkTypeArray(v, w) {
     modeRunner(v, a);
   });
 }
-function checkEmptyObject(v) {
-  checkObject(v);
-  if (Object.keys(v).length === 0) logError(`Object is empty`);
-}
-function optionalTypeCheck(v, w) {
+function checkOptionalType(v, w) {
   checkValidChecker(v);
   if (typeof w === "undefined" || w === null) return;
   modeRunner(v, w);
@@ -214,9 +246,9 @@ function checkLiteral(v, w, path = "@") {
     checkObject(w);
     checkMissingKey(v, w);
 
-    const nv = checkOptionalKeys(v, w);
+    const nv = filterOptionalKeys(v, w);
     for (const [wk, wv] of Object.entries(w)) {
-      checkKeys(nv, wk);
+      checkInvalidKeys(nv, wk);
       checkLiteral(nv[wk], wv, path + `.[${JSON.stringify(wk)}]`);
     }
   } else if (typeof v === "object" && Array.isArray(v)) {
@@ -233,35 +265,9 @@ function checkLiteral(v, w, path = "@") {
       logError(`Unexpected literal value: ${JSON.stringify(w)}, at ${path}`);
   }
 }
-
-// main param checks
-export function param(v, w) {
-  if (typeof v === "undefined") logError(`Missing 1st argument: types`);
-
-  checkValidChecker(v);
-  modeRunner(v, w);
-}
-
-/**
- * so we can use it easier like:
- * function test(...args){
- *   const [name,age] = multiParams(args,[string,number])
- *   console.log(name,age)
- * }
- */
-export function multiParams(w, v) {
-  if (!Array.isArray(v))
-    logError(`Expecting an array of types, received: ${JSON.stringify(v)}`);
-  if (!Array.isArray(w))
-    logError(`Expecting an array of arguments, received: ${JSON.stringify(w)}`);
-
-  filterOptionalArgs(v, w);
-
-  v.forEach((a, i) => {
-    param(a, w[i]);
-  });
-
-  return w;
+function checkEnumOf(v, w) {
+  if (!v.has(w))
+    logError(`Value '${JSON.stringify(w)}' doesn't exist from enumeration`);
 }
 
 // types
@@ -296,7 +302,7 @@ export const keyof = v => {
     tscmode: "key-check",
     tscvalidationkey: TSCVALIDATIONKEY,
     parentObj: v,
-    check: (a, b) => checkHasKey(a, b)
+    check: (a, b) => checkInvalidKeys(a, b)
   };
 };
 export const object = {
@@ -335,10 +341,10 @@ export const optional = v => {
     tscmode: "optional-type-check",
     tscvalidationkey: TSCVALIDATIONKEY,
     type: v,
-    check: (a, b) => optionalTypeCheck(a, b)
+    check: (a, b) => checkOptionalType(a, b)
   };
 };
-//since keys in object always goes string,I just check the value types instead
+//keys in object always returns string, so it checks values instead
 export const Record = v => {
   checkValidChecker(v);
   return {
@@ -357,13 +363,25 @@ export const literal = v => {
     check: (a, b) => checkLiteral(a, b)
   };
 };
+export const enumOf = v => {
+  checkObject(v);
+  checkEmptyObject(v);
+  const nv = new Set(Object.keys(v));
+  return {
+    tscmode: "enumeration-check",
+    tscvalidationkey: TSCVALIDATIONKEY,
+    values: nv,
+    check: (a, b) => checkEnumOf(a, b)
+  };
+};
 
 /**
  * Needed to add:
- * @enum - object like enumeration
+ * @Record<T,V> - update record that accepts key type check
+ * @Returns<T> - checks return type of a function
  */
 
-// as one obj
+// as one object
 export const types = {
   any,
   string,
@@ -377,5 +395,6 @@ export const types = {
   array,
   optional,
   Record,
-  literal
+  literal,
+  enumOf
 };

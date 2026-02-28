@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "dev": "node test.js"
+    "dev": "node test.js",
+    "pushf": "git push --force origin main"
   },
   "type": "module"
 }

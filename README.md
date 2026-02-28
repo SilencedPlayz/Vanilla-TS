@@ -304,4 +304,4 @@ Error: Not a valid string type: '42'
 
 ## License
 
-MIT
+[MIT](./LICENSE)
